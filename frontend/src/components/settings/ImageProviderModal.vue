@@ -234,10 +234,13 @@ const previewUrl = computed(() => {
 
   switch (props.formData.type) {
     case 'image_api':
-      if (endpointType.includes('chat')) {
-        return `${baseUrl}/v1/chat/completions`
+      // 使用用户输入的端点路径
+      // 确保端点路径格式正确
+      let endpoint = endpointType
+      if (!endpoint.startsWith('/')) {
+        endpoint = '/' + endpoint
       }
-      return `${baseUrl}/v1/images/generations`
+      return `${baseUrl}${endpoint}`
     case 'google_genai':
       return `${baseUrl}/v1beta/models/${props.formData.model || '{model}'}:generateImages`
     default:

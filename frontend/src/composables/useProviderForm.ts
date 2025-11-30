@@ -168,6 +168,8 @@ export function useProviderForm() {
         image_generation: imageConfig.value
       }
 
+      console.log('[autoSaveConfig] 发送配置:', JSON.stringify(config.image_generation, null, 2))
+
       const result = await updateConfig(config)
       if (result.success) {
         // 重新加载配置以获取最新的脱敏 API Key
@@ -410,7 +412,9 @@ export function useProviderForm() {
 
     // 如果是 OpenAI 兼容接口，保存 endpoint_type
     if (imageForm.value.type === 'image_api') {
-      providerData.endpoint_type = imageForm.value.endpoint_type
+      // 确保 endpoint_type 有默认值
+      providerData.endpoint_type = imageForm.value.endpoint_type || '/v1/images/generations'
+      console.log('[saveImageProvider] endpoint_type:', providerData.endpoint_type)
     }
 
     // 如果填写了新的 API Key，使用新的；否则保留原有的
@@ -424,6 +428,7 @@ export function useProviderForm() {
       providerData.base_url = imageForm.value.base_url
     }
 
+    console.log('[saveImageProvider] providerData:', JSON.stringify(providerData))
     imageConfig.value.providers[name] = providerData
 
     closeImageModal()
@@ -454,7 +459,8 @@ export function useProviderForm() {
         provider_name: editingImageProvider.value || undefined,
         api_key: imageForm.value.api_key || undefined,
         base_url: imageForm.value.base_url,
-        model: imageForm.value.model
+        model: imageForm.value.model,
+        endpoint_type: imageForm.value.endpoint_type || '/v1/images/generations'
       })
       if (result.success) {
         alert('✅ ' + result.message)
@@ -476,7 +482,8 @@ export function useProviderForm() {
         provider_name: name,
         api_key: undefined,
         base_url: provider.base_url,
-        model: provider.model
+        model: provider.model,
+        endpoint_type: provider.endpoint_type || '/v1/images/generations'
       })
       if (result.success) {
         alert('✅ ' + result.message)

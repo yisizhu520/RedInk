@@ -149,7 +149,8 @@ def create_config_blueprint():
             config = {
                 'api_key': data.get('api_key'),
                 'base_url': data.get('base_url'),
-                'model': data.get('model')
+                'model': data.get('model'),
+                'endpoint_type': data.get('endpoint_type')
             }
 
             # 如果没有提供 api_key，从配置文件读取
@@ -193,6 +194,9 @@ def _update_provider_config(config_path: Path, new_data: dict):
         config_path: 配置文件路径
         new_data: 新的配置数据
     """
+    logger.debug(f"更新配置文件: {config_path}")
+    logger.debug(f"新配置数据: {new_data}")
+
     # 读取现有配置
     existing_config = _read_config(config_path, {'providers': {}})
 
@@ -206,6 +210,8 @@ def _update_provider_config(config_path: Path, new_data: dict):
         new_providers = new_data['providers']
 
         for name, new_provider_config in new_providers.items():
+            logger.debug(f"处理服务商 [{name}]: {new_provider_config}")
+
             # 如果新配置的 api_key 是空的，保留原有的
             if new_provider_config.get('api_key') in [True, False, '', None]:
                 if name in existing_providers and existing_providers[name].get('api_key'):
@@ -220,6 +226,8 @@ def _update_provider_config(config_path: Path, new_data: dict):
         existing_config['providers'] = new_providers
 
     # 保存配置
+    logger.info(f"保存配置到: {config_path}")
+    logger.debug(f"最终配置: {existing_config}")
     _write_config(config_path, existing_config)
 
 
@@ -397,21 +405,55 @@ def _test_image_api(config: dict) -> dict:
     import requests
 
     base_url = config['base_url'].rstrip('/').rstrip('/v1') if config.get('base_url') else 'https://api.openai.com'
-    url = f"{base_url}/v1/models"
 
-    response = requests.get(
-        url,
-        headers={'Authorization': f"Bearer {config['api_key']}"},
-        timeout=30
-    )
+    # 支持自定义端点路径
+    endpoint_type = config.get('endpoint_type', '/v1/images/generations')
+    if not endpoint_type.startswith('/'):
+        endpoint_type = '/' + endpoint_type
 
-    if response.status_code == 200:
-        return {
-            "success": True,
-            "message": "连接成功！仅代表连接稳定，不确定是否可以稳定支持图片生成"
-        }
-    else:
-        raise Exception(f"HTTP {response.status_code}: {response.text[:200]}")
+    # 先尝试访问 models 接口测试连通性
+    models_url = f"{base_url}/v1/models"
+    logger.info(f"测试 Image API 连接: {models_url}")
+
+    try:
+        response = requests.get(
+            models_url,
+            headers={'Authorization': f"Bearer {config['api_key']}"},
+            timeout=30
+        )
+
+        if response.status_code == 200:
+            return {
+                "success": True,
+                "message": f"连接成功！端点: {base_url}{endpoint_type}"
+            }
+        elif response.status_code == 404:
+            # models 接口不存在，尝试直接访问配置的端点
+            logger.info(f"models 接口不存在，尝试端点: {base_url}{endpoint_type}")
+            test_url = f"{base_url}{endpoint_type}"
+            test_response = requests.post(
+                test_url,
+                headers={
+                    'Authorization': f"Bearer {config['api_key']}",
+                    'Content-Type': 'application/json'
+                },
+                json={},  # 空请求体，只测试连通性
+                timeout=30
+            )
+            # 只要不是网络错误就认为连接成功
+            if test_response.status_code in [200, 400, 401, 422]:
+                return {
+                    "success": True,
+                    "message": f"连接成功！端点: {test_url}"
+                }
+            else:
+                raise Exception(f"HTTP {test_response.status_code}: {test_response.text[:200]}")
+        else:
+            raise Exception(f"HTTP {response.status_code}: {response.text[:200]}")
+    except requests.exceptions.ConnectionError as e:
+        raise Exception(f"连接失败: {str(e)[:200]}")
+    except requests.exceptions.Timeout:
+        raise Exception("连接超时")
 
 
 def _check_response(result_text: str) -> dict:
